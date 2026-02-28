@@ -1,0 +1,305 @@
+# Jira XLSX Export Reference
+
+Full openpyxl patterns for generating the 3-sheet styled Jira import workbook.
+
+---
+
+## Workbook Structure
+
+| Sheet | Purpose | Audience |
+|-------|---------|---------|
+| `Jira Import` | Upload-ready CSV columns | Jira import wizard |
+| `Backlog View` | Human-readable backlog | Team / PM review |
+| `Summary` | Dashboard — counts, points, phases | Stakeholders |
+
+---
+
+## Colour System
+
+### Epic Colours (bg_hex, text_hex) — assign sequentially
+```python
+EPIC_PALETTE = [
+    ("D6E4F7", "1F3864"),  # Navy blue
+    ("D5F5E3", "1E6B3C"),  # Green
+    ("FDEBD0", "7B3F00"),  # Orange
+    ("F4ECF7", "6C3483"),  # Purple
+    ("EBF5FB", "1B4F72"),  # Dark blue
+    ("F0F3F4", "212F3D"),  # Slate
+    ("FEF9E7", "7D6608"),  # Gold
+    ("FDEDEC", "922B21"),  # Red
+    ("E8F8F5", "0E6655"),  # Teal
+    ("FDF2F8", "76448A"),  # Magenta
+]
+```
+
+### Priority Colours
+```python
+PRIORITY_COLORS = {
+    "High":   "FADBD8",   # Red tint
+    "Medium": "FEF9E7",   # Yellow tint
+    "Low":    "EAF4FB",   # Blue tint
+}
+```
+
+### Brand Colour
+```python
+NAVY = "1F3864"
+```
+
+---
+
+## Helper Functions
+
+```python
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+def hfill(hex_color):
+    return PatternFill("solid", fgColor=hex_color)
+
+def bfont(color="FFFFFF", size=10):
+    return Font(bold=True, color=color, name="Arial", size=size)
+
+def rfont(color="111111", size=9):
+    return Font(bold=False, color=color, name="Arial", size=size)
+
+def thin_border():
+    s = Side(style="thin", color="CCCCCC")
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def wrap_align(horizontal="left"):
+    return Alignment(wrap_text=True, vertical="top", horizontal=horizontal)
+```
+
+---
+
+## Sheet 1 — Jira Import
+
+```python
+ws1 = wb.active
+ws1.title = "Jira Import"
+
+HEADERS = ["Issue Type","Summary","Description","Epic Name","Epic Link",
+           "Priority","Story Points","Labels","Fix Version/s",
+           "Acceptance Criteria","Component/s","Reporter"]
+COL_WIDTHS = [14, 52, 60, 30, 30, 10, 12, 28, 12, 58, 20, 22]
+
+# Header row
+for col, (h, w) in enumerate(zip(HEADERS, COL_WIDTHS), 1):
+    cell = ws1.cell(row=1, column=col, value=h)
+    cell.font = bfont()
+    cell.fill = hfill(NAVY)
+    cell.alignment = wrap_align("center")
+    cell.border = thin_border()
+    ws1.column_dimensions[get_column_letter(col)].width = w
+ws1.row_dimensions[1].height = 28
+ws1.freeze_panes = "A2"
+
+# Data rows
+epic_color_idx = 0
+current_epic_bg = "F2F2F2"
+current_epic_fg = "111111"
+
+for row_idx, row in enumerate(data, 2):
+    if row["Issue Type"] == "Epic":
+        bg, fg = EPIC_PALETTE[epic_color_idx % len(EPIC_PALETTE)]
+        current_epic_bg, current_epic_fg = bg, fg
+        epic_color_idx += 1
+
+    for col, h in enumerate(HEADERS, 1):
+        val = row.get(h, "")
+        cell = ws1.cell(row=row_idx, column=col, value=val)
+        cell.border = thin_border()
+        cell.alignment = wrap_align()
+
+        if row["Issue Type"] == "Epic":
+            cell.fill = hfill(current_epic_bg)
+            cell.font = bfont(current_epic_fg, 10)
+        elif h == "Priority":
+            cell.fill = hfill(PRIORITY_COLORS.get(str(val), "F2F2F2"))
+            cell.font = bfont("111111", 9)
+        else:
+            cell.fill = hfill("FAFAFA")
+            cell.font = rfont()
+    ws1.row_dimensions[row_idx].height = 38
+
+ws1.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS))}1"
+```
+
+---
+
+## Sheet 2 — Backlog View
+
+```python
+ws2 = wb.create_sheet("Backlog View")
+BK_HEADERS = ["Epic","Type","Ticket ID","User Story","Priority","Pts","Phase","Component","Acceptance Criteria"]
+BK_WIDTHS   = [30, 10, 14, 55, 10, 6, 10, 20, 55]
+
+# Header row (same pattern as Sheet 1)
+
+# Data rows
+epic_color_idx = 0
+current_epic = ""
+current_epic_bg = "F2F2F2"
+current_epic_fg = "111111"
+row_num = 2
+
+for row in data:
+    if row["Issue Type"] == "Epic":
+        current_epic = row["Epic Name"]
+        bg, fg = EPIC_PALETTE[epic_color_idx % len(EPIC_PALETTE)]
+        current_epic_bg, current_epic_fg = bg, fg
+        epic_color_idx += 1
+
+        # Epic header row — full-width colour bar
+        for col in range(1, len(BK_HEADERS) + 1):
+            cell = ws2.cell(row=row_num, column=col)
+            cell.fill = hfill(current_epic_bg)
+            cell.font = bfont(current_epic_fg, 10)
+            cell.border = thin_border()
+            cell.alignment = wrap_align()
+        ws2.cell(row=row_num, column=1, value=current_epic)
+        ws2.cell(row=row_num, column=2, value="Epic")
+        ws2.cell(row=row_num, column=4, value=row["Summary"])
+        ws2.cell(row=row_num, column=5, value=row["Priority"])
+        ws2.cell(row=row_num, column=8, value=row["Component/s"])
+        ws2.row_dimensions[row_num].height = 24
+        row_num += 1
+
+    else:
+        # Extract ticket ID from [FR-001] prefix
+        summary = row["Summary"]
+        ticket_id = ""
+        if summary.startswith("["):
+            end = summary.find("]")
+            if end > 0:
+                ticket_id = summary[1:end]
+                summary = summary[end + 2:]
+
+        vals = [current_epic, "Story", ticket_id, summary,
+                row["Priority"], row["Story Points"] or "",
+                row["Fix Version/s"], row["Component/s"],
+                row["Acceptance Criteria"]]
+
+        for col, val in enumerate(vals, 1):
+            cell = ws2.cell(row=row_num, column=col, value=val)
+            cell.border = thin_border()
+            cell.alignment = wrap_align()
+            if col == 5:  # Priority column
+                cell.fill = hfill(PRIORITY_COLORS.get(str(val), "F2F2F2"))
+                cell.font = bfont("111111", 9)
+            else:
+                cell.fill = hfill("FAFAFA")
+                cell.font = rfont()
+        ws2.row_dimensions[row_num].height = 42
+        row_num += 1
+
+ws2.auto_filter.ref = f"A1:{get_column_letter(len(BK_HEADERS))}1"
+```
+
+---
+
+## Sheet 3 — Summary Dashboard
+
+```python
+ws3 = wb.create_sheet("Summary")
+
+# Title bar
+ws3.merge_cells("A1:E1")
+title_cell = ws3["A1"]
+title_cell.value = "[Project] — Jira Backlog Summary"
+title_cell.font = Font(bold=True, size=16, color="FFFFFF", name="Arial")
+title_cell.fill = hfill(NAVY)
+title_cell.alignment = Alignment(horizontal="center", vertical="center")
+ws3.row_dimensions[1].height = 38
+
+# Epic breakdown section
+ws3["A3"] = "Epic Breakdown"
+ws3["A3"].font = Font(bold=True, size=12, color=NAVY, name="Arial")
+
+epic_headers = ["Epic", "Stories", "Story Points", "Phase", "Component"]
+epic_widths   = [35, 10, 14, 12, 22]
+
+# Compute stats from data
+from collections import defaultdict
+epic_stats = defaultdict(lambda: {"stories": 0, "points": 0, "phase": "", "component": ""})
+current_epic = ""
+for row in data:
+    if row["Issue Type"] == "Epic":
+        current_epic = row["Epic Name"]
+        epic_stats[current_epic]["component"] = row["Component/s"]
+    else:
+        epic_stats[current_epic]["stories"] += 1
+        try:
+            epic_stats[current_epic]["points"] += int(row["Story Points"] or 0)
+        except:
+            pass
+        if not epic_stats[current_epic]["phase"] and row["Fix Version/s"]:
+            epic_stats[current_epic]["phase"] = row["Fix Version/s"]
+
+# Write epic table
+sum_row = 5
+total_stories = 0
+total_points = 0
+epic_color_idx = 0
+
+for epic_name, stats in epic_stats.items():
+    bg, fg = EPIC_PALETTE[epic_color_idx % len(EPIC_PALETTE)]
+    epic_color_idx += 1
+    vals = [epic_name, stats["stories"], stats["points"], stats["phase"], stats["component"]]
+    for col, val in enumerate(vals, 1):
+        cell = ws3.cell(row=sum_row, column=col, value=val)
+        cell.fill = hfill(bg)
+        cell.font = rfont(fg, 10)
+        cell.border = thin_border()
+        cell.alignment = wrap_align("center" if col > 1 else "left")
+    total_stories += stats["stories"]
+    total_points += stats["points"]
+    ws3.row_dimensions[sum_row].height = 22
+    sum_row += 1
+
+# Totals row
+for col, val in enumerate(["TOTAL", total_stories, total_points, "", ""], 1):
+    cell = ws3.cell(row=sum_row, column=col, value=val)
+    cell.font = bfont()
+    cell.fill = hfill(NAVY)
+    cell.border = thin_border()
+    cell.alignment = wrap_align("center" if col > 1 else "left")
+ws3.row_dimensions[sum_row].height = 24
+
+# Phase breakdown
+sum_row += 2
+ws3.cell(row=sum_row, column=1, value="Stories by Phase").font = Font(bold=True, size=12, color=NAVY, name="Arial")
+sum_row += 1
+
+PHASE_BG = {"Phase 1": "D6E4F7", "Phase 2": "D5F5E3", "Phase 3": "FDEBD0", "Sprint 1": "D6E4F7"}
+phase_stats = defaultdict(lambda: {"stories": 0, "points": 0})
+for row in data:
+    if row["Issue Type"] == "Story":
+        ph = row["Fix Version/s"] or "Unassigned"
+        phase_stats[ph]["stories"] += 1
+        try:
+            phase_stats[ph]["points"] += int(row["Story Points"] or 0)
+        except:
+            pass
+
+for ph, stats in phase_stats.items():
+    for col, val in enumerate([ph, stats["stories"], stats["points"]], 1):
+        cell = ws3.cell(row=sum_row, column=col, value=val)
+        cell.fill = hfill(PHASE_BG.get(ph, "F2F2F2"))
+        cell.font = rfont("111111", 10)
+        cell.border = thin_border()
+        cell.alignment = wrap_align("center" if col > 1 else "left")
+    ws3.row_dimensions[sum_row].height = 20
+    sum_row += 1
+```
+
+---
+
+## Save & Present
+
+```python
+wb.save(f"/home/claude/{project_key}_Jira_Import.xlsx")
+# Copy to outputs and present_files
+```
