@@ -1,0 +1,124 @@
+# Jira CSV Format Reference
+
+Specification for generating Jira-compatible bulk import CSV files.
+
+---
+
+## Standard Column Headers
+
+Use EXACTLY these names (Jira auto-maps them on import):
+
+```
+Issue Type, Summary, Description, Epic Name, Epic Link,
+Priority, Story Points, Labels, Fix Version/s,
+Acceptance Criteria, Component/s, Reporter
+```
+
+---
+
+## Column Rules
+
+| Column | Epic Row | Story Row | Notes |
+|--------|----------|-----------|-------|
+| Issue Type | `Epic` | `Story` | Case-sensitive |
+| Summary | Epic display name | `[FR-001] Short title` | Keep under 255 chars |
+| Description | Empty | Full user story text | Plain text; no markdown |
+| Epic Name | The epic's name | **Empty** | Used to create the Epic |
+| Epic Link | **Empty** | Must match Epic Name exactly | Links story to epic |
+| Priority | High/Medium/Low | High/Medium/Low | |
+| Story Points | Empty | Integer (Fibonacci) | |
+| Labels | `phase-1,module` | `phase-1,module` | Comma-separated, no spaces |
+| Fix Version/s | Empty | Sprint name | e.g. `Phase 1` or `Sprint 1` |
+| Acceptance Criteria | Empty | AC text | Plain text |
+| Component/s | Component name | Component name | Must exist in project |
+| Reporter | Author name | Author name | Must be valid Jira user |
+
+---
+
+## Epic / Story Linking Rule
+
+Jira CSV import links Stories to Epics by matching the Story's `Epic Link` value
+to an Epic's `Epic Name` value **within the same import file**.
+
+```
+Row 1: Issue Type=Epic,   Epic Name="Member Registration",  Epic Link=""
+Row 2: Issue Type=Story,  Epic Name="",  Epic Link="Member Registration"
+Row 3: Issue Type=Story,  Epic Name="",  Epic Link="Member Registration"
+```
+
+⚠️ Epic Name must be unique across the file.
+⚠️ Epic Link must match Epic Name exactly (case-sensitive).
+
+---
+
+## Encoding & Format Rules
+
+- UTF-8 encoding (handles Thai ฿, special chars)
+- Wrap cells containing commas in double quotes: `"text, with comma"`
+- Escape internal double-quotes by doubling: `"She said ""hello"""`
+- No trailing commas
+- One row per ticket (no merged cells)
+
+---
+
+## Python Generation Template
+
+```python
+import csv
+
+HEADERS = [
+    "Issue Type", "Summary", "Description", "Epic Name", "Epic Link",
+    "Priority", "Story Points", "Labels", "Fix Version/s",
+    "Acceptance Criteria", "Component/s", "Reporter"
+]
+
+def epic(name, summary, priority="High", label="", component="", reporter="BA Team"):
+    return {
+        "Issue Type": "Epic", "Summary": summary, "Description": "",
+        "Epic Name": name, "Epic Link": "", "Priority": priority,
+        "Story Points": "", "Labels": label, "Fix Version/s": "",
+        "Acceptance Criteria": "", "Component/s": component, "Reporter": reporter
+    }
+
+def story(epic_name, summary, description, ac, priority="Medium",
+          points=3, label="", version="Phase 1", component="", reporter="BA Team"):
+    return {
+        "Issue Type": "Story", "Summary": summary, "Description": description,
+        "Epic Name": "", "Epic Link": epic_name, "Priority": priority,
+        "Story Points": points, "Labels": label, "Fix Version/s": version,
+        "Acceptance Criteria": ac, "Component/s": component, "Reporter": reporter
+    }
+
+rows = []
+# Add epics and stories...
+
+with open("output.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(f, fieldnames=HEADERS)
+    writer.writeheader()
+    writer.writerows(rows)
+```
+
+---
+
+## Import Steps (for user)
+
+1. Jira → **Project Settings** → **Import Issues** → **CSV**
+2. Upload the CSV file
+3. On field mapping screen:
+   - `Story Points` → **Story Points** (or **Estimate**)
+   - `Fix Version/s` → **Sprint** → select target sprint
+   - `Acceptance Criteria` → **Acceptance Criteria** (or append to Description)
+4. Click **Begin Import**
+5. Epics are created first automatically; Stories link via Epic Name match
+
+---
+
+## Common Import Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "Epic not found" | Epic Link doesn't match Epic Name | Check exact spelling/case |
+| "Invalid priority" | Wrong priority value | Use exactly: High, Medium, Low |
+| "User not found" | Reporter name not a Jira user | Use email address instead |
+| "Component not found" | Component doesn't exist in project | Create component first, or leave blank |
+| Duplicate epics | Epic Name appears twice | Ensure each Epic Name is unique |
