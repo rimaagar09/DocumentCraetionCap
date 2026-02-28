@@ -1,0 +1,204 @@
+# User Story Writing Reference
+
+Patterns, templates, and guidelines for converting BRD requirements into Jira-quality user stories.
+
+---
+
+## User Story Format
+
+### Standard Template
+```
+As a [role/persona],
+I want [feature/capability],
+so that [benefit/outcome].
+```
+
+### Roles to Use (by context)
+| Role | Use When |
+|------|---------|
+| `new consumer / new user` | Registration, onboarding flows |
+| `existing member` | Transaction, redemption, scan flows |
+| `market admin` | Configuration, toggle, Admin Panel features |
+| `business owner` | Reporting, dashboards, revenue-related |
+| `backend system` | Validation, fraud, API, deduplication |
+| `QA tester` | UAT scenarios |
+| `security officer / DPO` | PII, PDPA, encryption |
+| `PM / program manager` | Sign-off, milestones, process |
+
+---
+
+## Description Field Structure
+
+```
+[User story sentence]
+
+Business Rules:
+- [Rule 1]
+- [Rule 2]
+
+Edge Cases:
+- [Edge case 1 → outcome]
+- [Edge case 2 → outcome]
+```
+
+---
+
+## Acceptance Criteria Patterns
+
+### Format: Bullet list (plain text for Jira)
+```
+- [Condition] confirmed within [SLA]
+- [Negative case] rejected with [reason code]
+- [Notification] delivered within [time]
+- [Report/log] records [fields]
+```
+
+### Common AC templates by module
+
+**Registration / Enrollment:**
+```
+- Member created in [system] within [X] sec of [trigger]
+- Duplicate [identifier] returns existing profile; no second record created
+- Welcome notification delivered within 60 sec; includes [fields]
+```
+
+**Points / Scan Earning:**
+```
+- Points credited within [X] sec of successful [event]
+- Ineligible [event] rejected; [REASON_CODE] logged; consumer shown error
+- Balance updated in real time; visible in app within [X] sec
+```
+
+**Voucher Issuance:**
+```
+- Unique voucher generated and delivered within 60 sec of [trigger]
+- Voucher value matches [configuration] for [brand/campaign]
+- Second [trigger] for same consumer → no second voucher; [REASON_CODE] logged
+```
+
+**Fraud / Validation:**
+```
+- [Duplicate/Velocity/Invalid] [event] rejected; [REASON_CODE] logged
+- [Threshold] enforced; breach triggers [action] within [time]
+- Fraud alert visible in Admin dashboard within [X] min
+```
+
+**Admin / Configuration:**
+```
+- Config change effective within [X] hours of Admin Panel save
+- Change log records: timestamp, admin ID, old value, new value
+- [Behaviour A] when enabled; [Behaviour B] when disabled
+```
+
+**Notifications:**
+```
+- Notification delivered within 60 sec; channel priority: push → SMS → email
+- Includes: [field1], [field2], [field3]
+- Delivery rate ≥ [X]%; failures logged with retry
+```
+
+**NFR (Non-Functional):**
+```
+- [Operation] completes in < [X] sec at p95 under normal load
+- Load test at [X] concurrent users passes within SLA
+- Monthly uptime ≥ [X]%; downtime ≤ [Y] hours/month
+```
+
+**UAT:**
+```
+- [Test action] → [Expected system response] within [time]
+- [Negative case] → [Expected rejection] with correct [reason/message]
+```
+
+---
+
+## Story Point Estimation Guide
+
+### Fibonacci Scale: 1, 2, 3, 5, 8, 13
+
+| Points | What it means | Typical examples |
+|--------|--------------|-----------------|
+| 1 | Trivial — config toggle, label change | Enable/disable flag, update text |
+| 2 | Simple — single API call, minor UI | Member lookup, balance display |
+| 3 | Standard — one integration + validation | Registration sync, points credit |
+| 5 | Medium — multi-step, conditional logic | Voucher issuance with rules, geofence |
+| 8 | Complex — multi-system, async, retry | Full scan validation + fraud + reward |
+| 13 | Very complex — full subsystem | White-label framework, AI feed engine |
+
+### Estimation Rules
+- No story should exceed 13 points — split if larger
+- UAT scenarios: always 1–2 points
+- NFR stories: 3–5 points (implementation complexity varies)
+- Admin/config stories: 2–5 points
+- Fraud/validation stories: 5–8 points (complex rule sets)
+- Notification stories: 3 points (standard; 5 if multi-channel fallback)
+- Reporting/dashboard stories: 3–5 points
+
+---
+
+## Labels Convention
+
+Use lowercase, hyphenated, comma-separated:
+
+```
+phase-1, phase-2, phase-3
+registration, onboarding
+scan, validation, fraud
+voucher, points, rewards
+notifications, engage
+admin, config, reporting
+nfr, security, pdpa, performance
+uat, testing, go-live
+integration, api, crm, pos
+```
+
+---
+
+## Summary Field Format
+
+```
+[REQ-ID] Short descriptive title
+```
+
+Examples:
+- `[FR-001] Wolf-Capillary Registration Integration`
+- `[NFR-003] TLS 1.3 & AES-256 Encryption`
+- `[UAT-005] Invalid QR Scan Rejection`
+
+Keep under 100 characters. No full sentences.
+
+---
+
+## Quality Checklist per Story
+
+- [ ] User story follows "As a / I want / so that" format
+- [ ] Business rules listed in description
+- [ ] At least 1 positive AC and 1 negative/edge case AC
+- [ ] SLA / time bound in AC (e.g. "within 3 sec", "within 60 sec")
+- [ ] Story Points set (Fibonacci; no blanks)
+- [ ] Priority set
+- [ ] Labels applied (phase + module)
+- [ ] Component set
+- [ ] Reporter set
+- [ ] Summary starts with [REQ-ID]
+
+---
+
+## Epic Naming Convention
+
+Epics should be noun phrases describing a capability area:
+
+✅ Good:
+- `Member Registration & NU Bonus`
+- `QR Scan & Validation`
+- `Brand-Wise Reward Issuance`
+- `Admin Configuration & Reporting`
+- `Non-Functional Requirements`
+- `UAT & Go-Live`
+
+❌ Avoid:
+- `FR-001 to FR-005` (not descriptive)
+- `Phase 1` (too broad — use as Fix Version instead)
+- `All Requirements` (meaningless)
+
+Aim for 4–8 epics per BRD. Group by functional domain, not by phase.
